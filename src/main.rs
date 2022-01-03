@@ -1,10 +1,6 @@
-#[macro_use]
-extern crate lazy_static;
 use std::time::Duration;
 
-use rusb::{
-    request_type, Context, Device, DeviceHandle, Direction, RequestType, Result, UsbContext,
-};
+use rusb::{Context, Device, DeviceHandle, Result, UsbContext};
 
 const VID: u16 = 0x054c;
 const PID: u16 = 0x05c4;
@@ -42,11 +38,6 @@ fn main() -> Result<()> {
 
     // clam and configure device
     configure_endpoint(&mut handle, &endpoint)?;
-    // control device here
-
-    // set_idle(&mut handle)?;
-    // let descriptor = get_descriptor(&mut handle)?;
-    // println!("Descriptor: {}", &descriptor);
 
     // Main loop
     let timeout = Duration::from_secs(1);
@@ -162,69 +153,3 @@ fn configure_endpoint<T: UsbContext>(
     handle.claim_interface(endpoint.iface)?;
     handle.set_alternate_setting(endpoint.iface, endpoint.setting)
 }
-
-fn set_idle<T: UsbContext>(handle: &mut DeviceHandle<T>) -> Result<usize> {
-    lazy_static! {
-        static ref REQUEST_TYPE: u8 = request_type(
-            Direction::Out,
-            rusb::RequestType::Class,
-            rusb::Recipient::Interface,
-        );
-    }
-    let timeout = Duration::from_secs(1);
-    // Const values are picked directly from the package capture data
-    const REQUEST: u8 = 0x0A;
-    const VALUE: u16 = 0x0000;
-    const INDEX: u16 = 0x0000;
-    handle.write_control(*REQUEST_TYPE, REQUEST, VALUE, INDEX, &[], timeout)
-}
-
-fn response_set_idle<T: UsbContext>(handle: &mut DeviceHandle<T>) -> Result<Vec<u8>> {
-    let timeout = Duration::from_secs(1);
-    // Const values are picked directly from the package capture data
-    const REQUEST_TYPE: u8 = 0x0;
-    const REQUEST: u8 = 0x0;
-    const VALUE: u16 = 0x0000;
-    const INDEX: u16 = 0x0000;
-    let mut buffer: Vec<u8> = vec![];
-    handle.read_control(0x80, REQUEST, VALUE, INDEX, &mut buffer, timeout)?;
-    println!("Response: {:?}", buffer);
-    Ok(buffer)
-}
-
-fn get_descriptor<T: UsbContext>(handle: &mut DeviceHandle<T>) -> Result<String> {
-    lazy_static! {
-        static ref REQUEST_TYPE: u8 = request_type(
-            Direction::Out,
-            rusb::RequestType::Class,
-            rusb::Recipient::Interface,
-        );
-    }
-
-    let timeout = Duration::from_secs(1);
-    // Const values are picked directly from the package capture data
-    let languages = handle.read_languages(timeout)?;
-    println!("{:?}", languages);
-    handle.read_string_descriptor(languages[0], 0x0, timeout)
-}
-
-// fn get_report<T: UsbContext>(handle: &mut DeviceHandle<T>) -> Result<usize> {
-//     let timeout = Duration::from_secs(1);
-
-//     // values are picked directly from the captured packet
-//     const REQUEST_TYPE: u8 = 0xa1;
-//     const REQUEST: u8 = 0x01;
-//     const VALUE: u16 = 0x0200;
-//     const INDEX: u16 = 0x0000;
-//     const DATA: [u8; 64] = [
-//         0x3f, 0x10, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-//         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-//         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-//         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-//         0x00, 0x00, 0x00, 0x5b,
-//     ];
-
-//     let mut buffer: Vec<u8> = vec![];
-
-//     let res = handle.read_control(REQUEST_TYPE, REQUEST, VALUE, INDEX, buffer, timeout)?;
-// }
