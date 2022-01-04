@@ -11,12 +11,15 @@ pub struct DS4State {
     l1: bool,
     l2: bool,
     l2_analog: u8,
+    l3: bool,
     r1: bool,
     r2: bool,
     r2_analog: u8,
+    r3: bool,
     select: bool,
     start: bool,
     touchpad: bool,
+    ps: bool,
     lsx: u8,
     lsy: u8,
     rsx: u8,
@@ -65,6 +68,18 @@ impl From<&[u8; 64]> for DS4State {
         let circle = buf[5] & 0x40 != 0;
         let triangle = buf[5] & 0x80 != 0;
 
+        // bumpers/triggers
+        let l1 = buf[6] & 0x01 != 0;
+        let r1 = buf[6] & 0x02 != 0;
+        let l2 = buf[6] & 0x04 != 0;
+        let r2 = buf[6] & 0x08 != 0;
+        let l3 = buf[6] & 0x40 != 0;
+        let r3 = buf[6] & 0x80 != 0;
+
+        // ps button & touchpad press
+        let ps = buf[7] & 0x01 != 0;
+        let touchpad = buf[7] & 0x02 != 0;
+
         Self {
             left,
             up,
@@ -78,11 +93,20 @@ impl From<&[u8; 64]> for DS4State {
             lsy,
             rsx,
             rsy,
+            l1,
+            r1,
+            l2,
+            r2,
+            l3,
+            r3,
+            ps,
+            touchpad,
             ..Default::default()
         }
     }
 }
 
+#[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +222,43 @@ mod tests {
         right_stick_full_down:
             "01 7F 7F 7F FF F0 00 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
             rsy == 0xFF;,
+        // l1-3 & r1-3 found on byte index 6
+        l1_pressed:
+            "01 7F 7F 7F FF F0 01 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == true; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false;,
+        r1_pressed:
+            "01 7F 7F 7F FF F0 02 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == true; l2 == false; r2 == false; l3 == false; r3 == false;,
+        l2_pressed:
+            "01 7F 7F 7F FF F0 04 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == true; r2 == false; l3 == false; r3 == false;,
+        r2_pressed:
+            "01 7F 7F 7F FF F0 08 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == true; l3 == false; r3 == false;,
+        l3_pressed:
+            "01 7F 7F 7F FF F0 40 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == true; r3 == false;,
+        r3_pressed:
+            "01 7F 7F 7F FF F0 80 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == true;,
+        all_lr_buttons_pressed:
+            "01 7F 7F 7F FF F0 CF 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == true; r1 == true; l2 == true; r2 == true; l3 == true; r3 == true;,
+        no_lr_buttons_pressed:
+            "01 7F 7F 7F FF F0 00 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false;,
+        // touchpad and ps button press found on byte index 7. If reading the raw data stream it might not seem like it, because they're 'hidden' behind a incrementing timer on the same byte
+        ps_button_pressed:
+            "01 7F 7F 7F FF F0 80 01 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            ps == true; touchpad == false;,
+        touchpad_pressed:
+            "01 7F 7F 7F FF F0 80 02 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            ps == false; touchpad == true;,
+        ps_button_and_touchpad_pressed:
+            "01 7F 7F 7F FF F0 80 03 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            ps == true; touchpad == true;,
+        ps_button_and_touchpad_NOT_pressed:
+            "01 7F 7F 7F FF F0 80 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            ps == false; touchpad == false;,
     }
 }
