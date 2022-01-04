@@ -1,1 +1,1 @@
-mod hid;
+pub mod hid;

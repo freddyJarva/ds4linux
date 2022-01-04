@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Default)]
 pub struct DS4State {
     left: bool,
@@ -24,6 +26,37 @@ pub struct DS4State {
     lsy: u8,
     rsx: u8,
     rsy: u8,
+}
+
+impl Display for DS4State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "^={} >={} v={} <={} ■={} ▲={} ●={} x={} l1={} r1={} l2={} r2={} l3={} r3={} PS={} TP={} SL={} ST={} LX={:02X} LY={:02X} RX={:02X} RY={:02X}",
+            self.up as u8,
+            self.right as u8,
+            self.down as u8,
+            self.left as u8,
+            self.square as u8,
+            self.triangle as u8,
+            self.circle as u8,
+            self.cross as u8,
+            self.l1 as u8,
+            self.r1 as u8,
+            self.l2 as u8,
+            self.r2 as u8,
+            self.l3 as u8,
+            self.r3 as u8,
+            self.ps as u8,
+            self.touchpad as u8,
+            self.select as u8,
+            self.start as u8,
+            self.lsx as u8,
+            self.lsy as u8,
+            self.rsx as u8,
+            self.rsy as u8,
+        )
+    }
 }
 
 impl From<&[u8; 64]> for DS4State {

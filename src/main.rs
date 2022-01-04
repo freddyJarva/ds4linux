@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use ds4linux::hid::DS4State;
 use rusb::{Context, Device, DeviceHandle, Result, UsbContext};
 
 const VID: u16 = 0x054c;
@@ -47,19 +48,25 @@ fn main() -> Result<()> {
 
     let mut stdout = stdout();
     println!("01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 TP PS\n");
+    let mut buf: [u8; 64] = [0; 64];
     loop {
-        let mut buf: Vec<u8> = vec![0; 64];
         handle.read_interrupt(endpoint.address, &mut buf, timeout)?;
-        let outstr = buf
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(" ");
-        let touchpad_down = buf[7] & 0x02;
-        let ps_button = buf[7] & 0x1;
-        print!("\r{}", outstr);
-        print!(" {:02X}", touchpad_down);
-        print!(" {:02X}", ps_button);
+        let c_state = DS4State::from(&buf);
+
+        // DEBUG OUTPUT
+        print!("\r{}", c_state);
+
+        // RAW DEBUG OUTPUT
+        // let outstr = buf
+        //     .iter()
+        //     .map(|b| format!("{:02X}", b))
+        //     .collect::<Vec<String>>()
+        //     .join(" ");
+        // let touchpad_down = buf[7] & 0x02;
+        // let ps_button = buf[7] & 0x1;
+        // print!("\r{}", outstr);
+        // print!(" {:02X}", touchpad_down);
+        // print!(" {:02X}", ps_button);
         stdout.flush().unwrap();
     }
 
