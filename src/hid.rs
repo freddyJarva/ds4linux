@@ -2,30 +2,38 @@ use std::fmt::Display;
 
 #[derive(Debug, Default)]
 pub struct DS4State {
-    left: bool,
-    up: bool,
-    right: bool,
-    down: bool,
-    square: bool,
-    triangle: bool,
-    circle: bool,
-    cross: bool,
-    l1: bool,
-    l2: bool,
-    l2_analog: u8,
-    l3: bool,
-    r1: bool,
-    r2: bool,
-    r2_analog: u8,
-    r3: bool,
-    select: bool,
-    start: bool,
-    touchpad: bool,
-    ps: bool,
-    lsx: u8,
-    lsy: u8,
-    rsx: u8,
-    rsy: u8,
+    pub left: bool,
+    pub up: bool,
+    pub right: bool,
+    pub down: bool,
+    pub square: bool,
+    pub triangle: bool,
+    pub circle: bool,
+    pub cross: bool,
+    pub l1: bool,
+    pub l2: bool,
+    pub l2_analog: u8,
+    pub l3: bool,
+    pub r1: bool,
+    pub r2: bool,
+    pub r2_analog: u8,
+    pub r3: bool,
+    pub select: bool,
+    pub start: bool,
+    pub touchpad: bool,
+    pub ps: bool,
+    pub lsx: u8,
+    pub lsy: u8,
+    pub rsx: u8,
+    pub rsy: u8,
+}
+
+impl DS4State {
+    pub fn initial_state() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
 }
 
 impl Display for DS4State {

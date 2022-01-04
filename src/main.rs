@@ -3,8 +3,15 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Result;
+use chrono::Utc;
 use ds4linux::hid::DS4State;
-use rusb::{Context, Device, DeviceHandle, Result, UsbContext};
+use evdev_rs::{
+    enums::{BusType, EventCode, EventType, EV_ABS, EV_KEY, EV_SYN},
+    AbsInfo, TimeVal,
+};
+use evdev_rs::{DeviceWrapper, InputEvent, UInputDevice, UninitDevice};
+use rusb::{Context, Device, DeviceHandle, UsbContext};
 
 const VID: u16 = 0x054c;
 const PID: u16 = 0x05c4;
@@ -15,6 +22,14 @@ struct Endpoint {
     iface: u8,
     setting: u8,
     address: u8,
+}
+
+fn event_time_now() -> TimeVal {
+    let event_time = Utc::now();
+    TimeVal::new(
+        event_time.timestamp(),
+        event_time.timestamp_subsec_micros() as i64,
+    )
 }
 
 fn main() -> Result<()> {
@@ -43,18 +58,53 @@ fn main() -> Result<()> {
     // clam and configure device
     configure_endpoint(&mut handle, &endpoint)?;
 
+    // Crate uinput device (/dev/input/jn, where n is a positive integer)
+    let u = UninitDevice::new().unwrap();
+    u.set_name("Sony Dualshock Hackery");
+    u.set_bustype(BusType::BUS_USB as u16);
+    u.set_vendor_id(VID);
+    u.set_product_id(PID);
+
+    u.enable_event_type(&EventType::EV_KEY)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_LEFT), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_UP), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_DOWN), None)?;
+
+    println!("Finished setting up key events");
+
+    let absinfo_dpad = AbsInfo {
+        value: 0,
+        minimum: -1,
+        maximum: 1,
+        fuzz: 0,
+        flat: 0,
+        resolution: 0,
+    };
+    u.enable_event_type(&EventType::EV_ABS)?;
+    println!("Finished setting up virtual device");
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_HAT0X), Some(&absinfo_dpad))?;
+    println!("Finished setting up virtual device");
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_HAT0Y), Some(&absinfo_dpad))?;
+
+    println!("Finished setting up virtual device");
+
+    let v = UInputDevice::create_from_device(&u)?;
+
     // Main loop
     let timeout = Duration::from_secs(1);
 
     let mut stdout = stdout();
     println!("01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 TP PS\n");
     let mut buf: [u8; 64] = [0; 64];
+
+    let mut p_state = DS4State::initial_state();
     loop {
         handle.read_interrupt(endpoint.address, &mut buf, timeout)?;
+        let event_time = event_time_now();
         let c_state = DS4State::from(&buf);
 
         // DEBUG OUTPUT
-        print!("\r{}", c_state);
+        // print!("\r{}", c_state);
 
         // RAW DEBUG OUTPUT
         // let outstr = buf
@@ -67,6 +117,62 @@ fn main() -> Result<()> {
         // print!("\r{}", outstr);
         // print!(" {:02X}", touchpad_down);
         // print!(" {:02X}", ps_button);
+
+        // TODO: check c_state to p_state to see if changes happened, before making c_state become p_state
+
+        // DPAD
+        if c_state.up != p_state.up || c_state.down != p_state.down {
+            let mut val = 0;
+            if c_state.up {
+                val = -1
+            } else if c_state.down {
+                val = 1;
+            }
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_ABS(EV_ABS::ABS_HAT0Y),
+                value: val,
+            })?;
+        }
+        if c_state.left != p_state.left || c_state.right != p_state.right {
+            let mut val = 0;
+            if c_state.left {
+                val = -1
+            } else if c_state.right {
+                val = 1;
+            }
+            v.write_event(&InputEvent {
+                time: event_time_now(),
+                event_code: EventCode::EV_ABS(EV_ABS::ABS_HAT0X),
+                value: val,
+            })?;
+        }
+
+        // Face buttons
+        if c_state.square != p_state.square {
+            v.write_event(&InputEvent {
+                time: event_time_now(),
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_WEST),
+                value: c_state.square as i32,
+            })?;
+        }
+
+        if c_state.cross != p_state.cross {
+            v.write_event(&InputEvent {
+                time: event_time_now(),
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_SOUTH),
+                value: c_state.cross as i32,
+            })?;
+        }
+
+        // Needs to be called to make written events be updated
+        v.write_event(&InputEvent {
+            time: event_time_now(),
+            event_code: EventCode::EV_SYN(EV_SYN::SYN_REPORT),
+            value: 0,
+        })?;
+
+        p_state = c_state;
         stdout.flush().unwrap();
     }
 
@@ -170,7 +276,7 @@ fn find_readable_endpoints<T: UsbContext>(device: &mut Device<T>) -> Result<Vec<
 fn configure_endpoint<T: UsbContext>(
     handle: &mut DeviceHandle<T>,
     endpoint: &Endpoint,
-) -> Result<()> {
+) -> rusb::Result<()> {
     handle.set_active_configuration(endpoint.config)?;
     handle.claim_interface(endpoint.iface)?;
     handle.set_alternate_setting(endpoint.iface, endpoint.setting)
