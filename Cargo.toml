@@ -9,3 +9,6 @@ edition = "2021"
 rusb = "0.9"
 byteorder = "1"
 lazy_static = "1.4"
+
+[dev-dependencies]
+hex = "0.4"
