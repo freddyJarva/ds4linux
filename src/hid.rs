@@ -26,6 +26,7 @@ pub struct DS4State {
     pub lsy: u8,
     pub rsx: u8,
     pub rsy: u8,
+    pub timer: u8,
 }
 
 impl DS4State {
@@ -40,7 +41,7 @@ impl Display for DS4State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "^={} >={} v={} <={} ■={} ▲={} ●={} x={} l1={} r1={} l2={} r2={} l3={} r3={} PS={} TP={} SL={} ST={} LX={:02X} LY={:02X} RX={:02X} RY={:02X}",
+            "^={} >={} v={} <={} ■={} ▲={} ●={} x={} l1={} r1={} l2={} r2={} l3={} r3={} PS={} TP={} SL={} ST={} LX={:02X} LY={:02X} RX={:02X} RY={:02X} TM={:02X}",
             self.up as u8,
             self.right as u8,
             self.down as u8,
@@ -59,10 +60,11 @@ impl Display for DS4State {
             self.touchpad as u8,
             self.select as u8,
             self.start as u8,
-            self.lsx as u8,
-            self.lsy as u8,
-            self.rsx as u8,
-            self.rsy as u8,
+            self.lsx,
+            self.lsy,
+            self.rsx,
+            self.rsy,
+            self.timer
         )
     }
 }
@@ -109,17 +111,20 @@ impl From<&[u8; 64]> for DS4State {
         let circle = buf[5] & 0x40 != 0;
         let triangle = buf[5] & 0x80 != 0;
 
-        // bumpers/triggers
+        // bumpers/triggers/start/select
         let l1 = buf[6] & 0x01 != 0;
         let r1 = buf[6] & 0x02 != 0;
         let l2 = buf[6] & 0x04 != 0;
         let r2 = buf[6] & 0x08 != 0;
+        let select = buf[6] & 0x10 != 0;
+        let start = buf[6] & 0x20 != 0;
         let l3 = buf[6] & 0x40 != 0;
         let r3 = buf[6] & 0x80 != 0;
 
-        // ps button & touchpad press
+        // ps button, touchpad press & timer
         let ps = buf[7] & 0x01 != 0;
         let touchpad = buf[7] & 0x02 != 0;
+        let timer = buf[7] >> 2;
 
         Self {
             left,
@@ -140,8 +145,11 @@ impl From<&[u8; 64]> for DS4State {
             r2,
             l3,
             r3,
+            select,
+            start,
             ps,
             touchpad,
+            timer,
             ..Default::default()
         }
     }
@@ -263,31 +271,37 @@ mod tests {
         right_stick_full_down:
             "01 7F 7F 7F FF F0 00 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
             rsy == 0xFF;,
-        // l1-3 & r1-3 found on byte index 6
+        // l1-3 & r1-3 & start/select found on byte index 6
         l1_pressed:
             "01 7F 7F 7F FF F0 01 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == true; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false;,
+            l1 == true; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false; start == false; select == false;,
         r1_pressed:
             "01 7F 7F 7F FF F0 02 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == true; l2 == false; r2 == false; l3 == false; r3 == false;,
+            l1 == false; r1 == true; l2 == false; r2 == false; l3 == false; r3 == false; start == false; select == false;,
         l2_pressed:
             "01 7F 7F 7F FF F0 04 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == false; l2 == true; r2 == false; l3 == false; r3 == false;,
+            l1 == false; r1 == false; l2 == true; r2 == false; l3 == false; r3 == false; start == false; select == false;,
         r2_pressed:
             "01 7F 7F 7F FF F0 08 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == false; l2 == false; r2 == true; l3 == false; r3 == false;,
+            l1 == false; r1 == false; l2 == false; r2 == true; l3 == false; r3 == false; start == false; select == false;,
         l3_pressed:
             "01 7F 7F 7F FF F0 40 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == false; l2 == false; r2 == false; l3 == true; r3 == false;,
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == true; r3 == false; start == false; select == false;,
         r3_pressed:
             "01 7F 7F 7F FF F0 80 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == true;,
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == true; start == false; select == false;,
+        select_pressed:
+            "01 7F 7F 7F FF F0 10 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false; start == false; select == true;,
+        start_pressed:
+            "01 7F 7F 7F FF F0 20 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false; start == true; select == false;,
         all_lr_buttons_pressed:
-            "01 7F 7F 7F FF F0 CF 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == true; r1 == true; l2 == true; r2 == true; l3 == true; r3 == true;,
+            "01 7F 7F 7F FF F0 FF 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
+            l1 == true; r1 == true; l2 == true; r2 == true; l3 == true; r3 == true; start == true; select == true;,
         no_lr_buttons_pressed:
             "01 7F 7F 7F FF F0 00 00 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";
-            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false;,
+            l1 == false; r1 == false; l2 == false; r2 == false; l3 == false; r3 == false; start == false; select == false;,
         // touchpad and ps button press found on byte index 7. If reading the raw data stream it might not seem like it, because they're 'hidden' behind a incrementing timer on the same byte
         ps_button_pressed:
             "01 7F 7F 7F FF F0 80 01 00 00 0D AF FF E9 FF EE FF F2 FF 28 03 23 20 FF FF 00 00 00 00 00 1B 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00 00 00 80 00 00 00 00 80 00";

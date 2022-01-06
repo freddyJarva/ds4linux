@@ -1,11 +1,12 @@
+use core::time;
 use std::{
     io::{stdout, Write},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
-use chrono::Utc;
-use ds4linux::hid::DS4State;
+
+use ds4linux::{curve, hid::DS4State};
 use evdev_rs::{
     enums::{BusType, EventCode, EventType, EV_ABS, EV_KEY, EV_SYN},
     AbsInfo, TimeVal,
@@ -16,6 +17,8 @@ use rusb::{Context, Device, DeviceHandle, UsbContext};
 const VID: u16 = 0x054c;
 const PID: u16 = 0x05c4;
 
+const ANALOG_MAX: u8 = 255;
+
 #[derive(Debug)]
 struct Endpoint {
     config: u8,
@@ -25,11 +28,11 @@ struct Endpoint {
 }
 
 fn event_time_now() -> TimeVal {
-    let event_time = Utc::now();
-    TimeVal::new(
-        event_time.timestamp(),
-        event_time.timestamp_subsec_micros() as i64,
-    )
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    TimeVal::new(now.as_secs() as i64, now.subsec_nanos() as i64)
 }
 
 fn main() -> Result<()> {
@@ -66,11 +69,18 @@ fn main() -> Result<()> {
     u.set_product_id(PID);
 
     u.enable_event_type(&EventType::EV_KEY)?;
-    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_LEFT), None)?;
-    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_UP), None)?;
-    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_DPAD_DOWN), None)?;
-
-    println!("Finished setting up key events");
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_WEST), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_SOUTH), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_EAST), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_NORTH), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_SELECT), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_START), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_TOUCH), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_MODE), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_TL), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_TL2), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_TR), None)?;
+    u.enable_event_code(&EventCode::EV_KEY(EV_KEY::BTN_TR2), None)?;
 
     let absinfo_dpad = AbsInfo {
         value: 0,
@@ -80,11 +90,31 @@ fn main() -> Result<()> {
         flat: 0,
         resolution: 0,
     };
+
+    let absinfo_stick = AbsInfo {
+        value: 127,
+        minimum: 0,
+        maximum: ANALOG_MAX as i32,
+        fuzz: 0,
+        flat: 15,
+        resolution: 0,
+    };
+    let absinfo_stick_r = AbsInfo {
+        value: 127,
+        minimum: 0,
+        maximum: ANALOG_MAX as i32,
+        fuzz: 0,
+        flat: 5,
+        resolution: 0,
+    };
     u.enable_event_type(&EventType::EV_ABS)?;
-    println!("Finished setting up virtual device");
     u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_HAT0X), Some(&absinfo_dpad))?;
-    println!("Finished setting up virtual device");
     u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_HAT0Y), Some(&absinfo_dpad))?;
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_TILT_X), Some(&absinfo_stick))?;
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_TILT_Y), Some(&absinfo_stick))?;
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_RX), Some(&absinfo_stick_r))?;
+    u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_RY), Some(&absinfo_stick_r))?;
+    // u.enable_event_code(&EventCode::EV_ABS(EV_ABS::ABS_RY), Some(&absinfo_stick))?;
 
     println!("Finished setting up virtual device");
 
@@ -104,7 +134,7 @@ fn main() -> Result<()> {
         let c_state = DS4State::from(&buf);
 
         // DEBUG OUTPUT
-        // print!("\r{}", c_state);
+        print!("\r{}", c_state);
 
         // RAW DEBUG OUTPUT
         // let outstr = buf
@@ -142,7 +172,7 @@ fn main() -> Result<()> {
                 val = 1;
             }
             v.write_event(&InputEvent {
-                time: event_time_now(),
+                time: event_time,
                 event_code: EventCode::EV_ABS(EV_ABS::ABS_HAT0X),
                 value: val,
             })?;
@@ -151,23 +181,139 @@ fn main() -> Result<()> {
         // Face buttons
         if c_state.square != p_state.square {
             v.write_event(&InputEvent {
-                time: event_time_now(),
+                time: event_time,
                 event_code: EventCode::EV_KEY(EV_KEY::BTN_WEST),
                 value: c_state.square as i32,
             })?;
         }
-
         if c_state.cross != p_state.cross {
             v.write_event(&InputEvent {
-                time: event_time_now(),
+                time: event_time,
                 event_code: EventCode::EV_KEY(EV_KEY::BTN_SOUTH),
                 value: c_state.cross as i32,
+            })?;
+        }
+        if c_state.circle != p_state.circle {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_EAST),
+                value: c_state.circle as i32,
+            })?;
+        }
+        if c_state.triangle != p_state.triangle {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_NORTH),
+                value: c_state.triangle as i32,
+            })?;
+        }
+
+        // Triggers
+        if c_state.l1 != p_state.l1 {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_TL),
+                value: c_state.l1 as i32,
+            })?;
+        }
+        if c_state.l2 != p_state.l2 {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_TL2),
+                value: c_state.l2 as i32,
+            })?;
+        }
+        if c_state.r1 != p_state.r1 {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_TR),
+                value: c_state.r1 as i32,
+            })?;
+        }
+        if c_state.r2 != p_state.r2 {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_TR2),
+                value: c_state.r2 as i32,
+            })?;
+        }
+
+        // PS & Touchpad
+        if c_state.ps != p_state.ps {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_MODE),
+                value: c_state.ps as i32,
+            })?;
+        }
+        if c_state.touchpad != p_state.touchpad {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_TOUCH),
+                value: c_state.touchpad as i32,
+            })?;
+        }
+
+        // start select
+        if c_state.start != p_state.start {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_START),
+                value: c_state.start as i32,
+            })?;
+        }
+        if c_state.select != p_state.select {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_KEY(EV_KEY::BTN_SELECT),
+                value: c_state.select as i32,
+            })?;
+        }
+
+        // Analogues
+        // Left stick
+        if c_state.lsx != p_state.lsx {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_ABS(EV_ABS::ABS_TILT_X),
+                value: curve::quad(c_state.lsx, ANALOG_MAX) as i32,
+            })?;
+        }
+        if c_state.lsy != p_state.lsy {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_ABS(EV_ABS::ABS_TILT_Y),
+                value: curve::quad(c_state.lsy, ANALOG_MAX) as i32,
+            })?;
+        }
+        // Right stick
+        if c_state.rsx != p_state.rsx {
+            // Deadzone check
+            if i16::abs(c_state.rsx as i16 - 128) > 100 {
+                v.write_event(&InputEvent {
+                    time: event_time,
+                    event_code: EventCode::EV_ABS(EV_ABS::ABS_RX),
+                    value: c_state.rsx as i32,
+                })?;
+            } else {
+                v.write_event(&InputEvent {
+                    time: event_time,
+                    event_code: EventCode::EV_ABS(EV_ABS::ABS_RX),
+                    value: 127, // center stick value
+                })?;
+            }
+        }
+        if c_state.rsy != p_state.rsy {
+            v.write_event(&InputEvent {
+                time: event_time,
+                event_code: EventCode::EV_ABS(EV_ABS::ABS_RY),
+                value: c_state.rsy as i32,
             })?;
         }
 
         // Needs to be called to make written events be updated
         v.write_event(&InputEvent {
-            time: event_time_now(),
+            time: event_time,
             event_code: EventCode::EV_SYN(EV_SYN::SYN_REPORT),
             value: 0,
         })?;
