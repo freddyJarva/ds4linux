@@ -134,7 +134,7 @@ fn main() -> Result<()> {
         let c_state = DS4State::from(&buf);
 
         // DEBUG OUTPUT
-        print!("\r{}", c_state);
+        // print!("\r{}", c_state);
 
         // RAW DEBUG OUTPUT
         // let outstr = buf
@@ -276,14 +276,14 @@ fn main() -> Result<()> {
             v.write_event(&InputEvent {
                 time: event_time,
                 event_code: EventCode::EV_ABS(EV_ABS::ABS_TILT_X),
-                value: curve::quad(c_state.lsx, ANALOG_MAX) as i32,
+                value: curve::custom(c_state.lsx, ANALOG_MAX) as i32,
             })?;
         }
         if c_state.lsy != p_state.lsy {
             v.write_event(&InputEvent {
                 time: event_time,
                 event_code: EventCode::EV_ABS(EV_ABS::ABS_TILT_Y),
-                value: curve::quad(c_state.lsy, ANALOG_MAX) as i32,
+                value: curve::custom(c_state.lsy, ANALOG_MAX) as i32,
             })?;
         }
         // Right stick
