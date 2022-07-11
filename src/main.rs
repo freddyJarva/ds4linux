@@ -1,4 +1,3 @@
-use core::time;
 use std::{
     io::{stdout, Write},
     time::{Duration, SystemTime, UNIX_EPOCH},
